@@ -1,7 +1,11 @@
+#ifdef __APPLE__
+#include <GLUT/glut.h>
+#else
+#include <GL/glut.h>
+#endif
+
 #include <math.h>
 #include <iostream>
-#include<GL/glut.h>
-
 #include "classdef.h"
 #include "globalv.h"
 

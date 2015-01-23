@@ -1,4 +1,9 @@
-#include<GL/glut.h>
+#ifdef __APPLE__
+#include <GLUT/glut.h>
+#else
+#include <GL/glut.h>
+#endif
+
 #include<math.h>
 #include<string>
 #include<string.h>
@@ -7,6 +12,7 @@
 #include"globalv.h"
 #include<sstream>
 #include<vector>
+#include<unistd.h>
 
 #include <iostream>
 using namespace std;
@@ -18,11 +24,7 @@ vector<Vector3DH> pts;
 
 vector<Object3D> objects;
 
-//vector<Vector3DH> pts;
-//vector<Vector3DH> orig_pts;
-
 Vector3DH dragStart, dragEnd;
-Matrix3DH transform;
 int numVertices=0, numFaces=0;
 
 GLdouble theta = 0.0;
@@ -30,8 +32,6 @@ GLdouble theta = 0.0;
 GLfloat ka[4];
 GLfloat kd[4];
 GLfloat ks[4];
-
-int state = 0;
 
 void processMiscObjects(double theta) 
 {
@@ -62,21 +62,6 @@ void processHypotenusRod(double theta)
     
     objects[11].draw();        
 }
-
-
-void doTranslation(int x, int y, int z)
-{
-    Matrix3DH translate;
-    translate.setTranslation(x,y,z);
-
-    //apply the matrix to matrix so far.
-    transform.multiply(&translate);
-
-    for (int i=0;i<numVertices;i++)
-    {
-        pts[i] = orig_pts[i].applyTransform(&transform);
-    }
-}    
 
 void processPistonRod(double theta) 
 {
@@ -111,6 +96,7 @@ void processHorizontalRod(double theta)
 void processWheels(double theta) 
 {
     glPushMatrix();    
+    //glLoadIdentity(); //TODO Do we need this
     glTranslatef(0.308,-0.03,-0.737);    
     glRotatef(theta,0.1f,0.0f,0.0f);
     glTranslatef(-0.308,0.03,0.737);    
@@ -169,82 +155,6 @@ void display()
     glutPostRedisplay();    
 }
 
-void doMouse(int button, int mouseState, int x, int y)
-{
-    if (state == TRAN)
-    {
-        //get the start and end point of user drag to find the translation vector.
-        if (button==GLUT_LEFT_BUTTON && mouseState==GLUT_DOWN)
-        {
-            dragStart.x = (x - HEIGHT);
-            dragStart.y = (WIDTH - y);
-        }
-        else if (button==GLUT_LEFT_BUTTON && mouseState==GLUT_UP)
-        {
-            dragEnd.x = (x - HEIGHT);
-            dragEnd.y = (WIDTH - y);
-
-            //dx and dy are the displacements along x and y axis for the transform.
-            float dx = ((float)dragEnd.x - dragStart.x)*2*CAMERA/WIDTH;
-            float dy = ((float)dragEnd.y - dragStart.y)*2*CAMERA/HEIGHT;
-
-            doTranslation(dx,dy,0);
-
-            glutPostRedisplay();
-        } 
-    }
-    else if (state==ROTATE)
-    {
-        if (button==GLUT_LEFT_BUTTON && mouseState==GLUT_DOWN)
-        {
-            dragStart.x = ((float)(x - HEIGHT/2)/WIDTH);
-            dragStart.y = ((float)(WIDTH/2 - y)/HEIGHT);
-            dragStart.z = (sqrt(1-dragStart.x*dragStart.x-dragStart.y*dragStart.y));
-        }
-        else if (button==GLUT_LEFT_BUTTON && mouseState==GLUT_UP)
-        {
-            float a,b;
-            dragEnd.x = ((float)(x - WIDTH/2)/WIDTH);
-            dragEnd.y = ((float)(HEIGHT/2 - y)/HEIGHT);    
-            dragEnd.z = (sqrt(1-dragEnd.x*dragEnd.x-dragEnd.y*dragEnd.y));    
-            
-            Vector3DH axis = dragStart.crossProduct(dragEnd);
-//            cout<<axis.print().c_str()<<endl;//testing
-            Vector3DH uprime(0.0f,axis.y,axis.z,1.0);
-            
-            Vector3DH z(0.0f,0.0f,1.0f,1.0);
-            Matrix3DH alpha,ralpha;
-            a = uprime.angle(z);
-            alpha.setXRotation(a);
-            ralpha.setXRotation(-a);
-            
-            Vector3DH udprime = axis.applyTransform(&alpha);
-            Matrix3DH beta,rbeta;
-            b = udprime.angle(z);
-            beta.setYRotation(b);
-            rbeta.setYRotation(-b);
-            
-            Matrix3DH theta;
-            theta.setZRotation(dragStart.angle(dragEnd));
-//            theta.setYRotation(dragStart.angle(dragEnd));
-            
-            transform.multiply(&alpha);
-            transform.multiply(&beta);
-            transform.multiply(&theta);
-            transform.multiply(&rbeta);
-            transform.multiply(&ralpha);
-            
-            for (int i=0;i<numVertices;i++)
-            {
-                pts[i] = orig_pts[i].applyTransform(&transform);
-            }
-            //reset the transform matrix to an Identity matrix.
-            glutPostRedisplay();
-            
-        }            
-    }
-}
-
 void setRC()
 {
     glClearColor(WHITE,1.0f);
@@ -300,7 +210,6 @@ void readOBJ(char* fileName)
 
     string buffer, identifier;
     
-//    int vi=0,fi=0;
     float x,y,z;
     int mi = -1;                    //material index for a face. 
     int vadj = 0, vc=0;
@@ -324,9 +233,6 @@ void readOBJ(char* fileName)
 //            nc=0;
             
             inFile>>objects.back().name;
-
-//            cout<<"on object "<<objects.back().name<<endl;cout.flush();//testing
-            
         }        
         else if (identifier == "v")        // vertex data
         {
@@ -368,63 +274,6 @@ void readOBJ(char* fileName)
     cout<<"done reading obj file"<<endl;cout.flush();//testing
 }
 
-void keyboard(unsigned char key, int x, int y)
-{
-    //Change the state based on the key input by the user. 
-    if (state!=DRAW)
-    {
-        switch (key)
-        {
-            case 'r': state = ROTATE;break;
-            case 't': state = TRAN;break;
-            case 's': state = SCALE;break;        
-            case 27: exit(0);break;                         
-        }
-        glutPostRedisplay();
-    }    
-}
-
-void specialKeys(int key, int x, int y)
-{
-    switch(key)
-    {
-        case GLUT_KEY_UP:
-            if (state == SCALE)
-            {
-                doTranslation(0,0,CAMERA/10);
-            }
-            else if (state == TRAN)
-            {
-                doTranslation(0,-CAMERA/10,0);
-            }
-            break;
-        case GLUT_KEY_DOWN: 
-            if (state == SCALE)
-            {
-                doTranslation(0,0,-CAMERA/10);
-            }
-            else if (state == TRAN)
-            {
-                doTranslation(0,CAMERA/10,0);
-            }        
-            break;
-        case GLUT_KEY_RIGHT:
-            if (state == TRAN)
-            {
-                doTranslation(-CAMERA/10,0,0);
-            }        
-            break;
-        case GLUT_KEY_LEFT:
-            if (state == TRAN)
-            {
-                doTranslation(CAMERA/10,0,0);
-            }        
-            break;            
-        }
-        glutPostRedisplay();
-} 
-        
-
 int main(int argc, char* argv[])
 {
     //Initial setup
@@ -437,7 +286,6 @@ int main(int argc, char* argv[])
     
     glutInit(&argc, argv);
     glutInitDisplayMode(GLUT_RGB | GLUT_DOUBLE |GLUT_DEPTH);    
-//    glutInitDisplayMode(GLUT_RGBA | GLUT_SINGLE);
     glutInitWindowSize(HEIGHT,WIDTH);
     glutInitWindowPosition(0,0);
     glutCreateWindow("Assignment No. 1");
@@ -446,13 +294,7 @@ int main(int argc, char* argv[])
     setRC();
 
     glutDisplayFunc(display);
-    glutMouseFunc(doMouse);
-    glutKeyboardFunc(keyboard);
-    glutSpecialFunc(specialKeys);
     
-//    glutReshapeFunc(reshape);
-    //set window cordinates
-
     glutMainLoop();
 
     return 0;
